@@ -414,7 +414,7 @@ process plot_regions_meta {
 
     machineType 'n2-standard-4'
 
-    errorStrategy 'ignore'
+    label 'safe_to_skip'
 
     input:
         tuple val(analysis), val(pheno), path(sumstats)
@@ -440,7 +440,7 @@ process plot_singles_meta {
 
     machineType 'n2-standard-4'
 
-    errorStrategy 'ignore'
+    label 'safe_to_skip'
 
     input:
         tuple val(analysis), val(pheno), path(sumstats)
@@ -457,6 +457,7 @@ process plot_singles_meta {
     stub:
         """
         touch ${analysis}.${pheno}.singles.stub.png
+        touch ${analysis}.${pheno}.exwas_singles.plots_manifest.csv
         """
 }
 
@@ -573,7 +574,7 @@ process collect_exwas_regions_plots {
 
     machineType 'n2-standard-16'
 
-    errorStrategy 'ignore'
+    label 'safe_to_skip'
 
     input:
         val(saige_analysis)
@@ -607,7 +608,7 @@ process collect_exwas_singles_plots {
 
     machineType 'n2-standard-16'
 
-    errorStrategy 'ignore'
+    label 'safe_to_skip'
 
     input:
         val(saige_analysis)
