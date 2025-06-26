@@ -12,6 +12,7 @@ def make_arg_parser():
     parser.add_argument('-p', '--phenotype', required=True, help='phenotype')
     parser.add_argument('-a', '--analysis', required=True, help='cohort')
     parser.add_argument('-s', '--sumstats', required=True)
+    parser.add_argument('--pcol', required=True, help='for region tests whether to use the results from burden tests, SKAT tests or SKATO tests')
 
     return parser
 
@@ -24,6 +25,17 @@ regions_sumstats = args.sumstats
 # Read in full summary stats file
 full_sumstats = pd.read_table(regions_sumstats)
 
+# Deal with p-value columns
+# User gets to choose Stouffer p-value column for plotting
+# BUT if they accidentally picked one that doesn't exist, we fix it
+raw_p_col = args.pcol
+other_possible_p_cols = [c for c in ['p_skato', 'p_skat', 'p_burden'] if c != raw_p_col]
+if f'{raw_p_col}_stouffer_meta' not in full_sumstats.columns:
+    raw_p_col = other_possible_p_cols[0]
+    if f'{raw_p_col}_stouffer_meta' not in full_sumstats.columns:
+        raw_p_col = other_possible_p_cols[1]
+use_p_col = f'{raw_p_col}_stouffer_meta'
+
 # loop through all grouptest annotations and MAF value combinations
 for ann in full_sumstats['annot_group'].unique():
     for maf in full_sumstats['max_maf'].unique():
@@ -32,7 +44,7 @@ for ann in full_sumstats['annot_group'].unique():
         maf = np.float64(maf)
         output_manhattan = f'{analysis}.{pheno}.{ann.replace(";","-")}.maf{str(maf).replace(".","-")}.regions.manhattan.png'
         output_qq = f'{analysis}.{pheno}.{ann.replace(";","-")}.maf{str(maf).replace(".","-")}.regions.qq.png'
-        plot_title = f'SAIGE ExWAS Regions {analysis}: {pheno.replace("_", " ")}\nGroup = {ann}, MAF = {maf}'
+        plot_title = f'Meta-Analysis of Exome-Wide Gene Regions {analysis}: {pheno.replace("_", " ")}\nGroup = {ann}, MAF = {maf}.\nP-Values Meta-Analyzed with Stouffer: {use_p_col}'
         print(f'\n{plot_title}')
 
         # Instantiate Manhattan Plot object
@@ -49,7 +61,7 @@ for ann in full_sumstats['annot_group'].unique():
             continue
         
         # Clean data for Manhattan plot
-        mp.clean_data(col_map={'chr': '#CHROM', 'pos_start': 'POS', 'gene_symbol': 'ID', 'p_burden_stouffer_meta': 'P'})
+        mp.clean_data(col_map={'chr': '#CHROM', 'pos_start': 'POS', 'gene_symbol': 'ID', use_p_col: 'P'})
         # Protect against underflow
         mp.df['P'] = np.where(mp.df['P'].astype(float) < sys.float_info.min, sys.float_info.min, mp.df['P'].astype(float))
         mp.get_thinned_data()
@@ -57,6 +69,8 @@ for ann in full_sumstats['annot_group'].unique():
 
         # Dynamically compute the p-value threshold
         num_ind_tests = len(mp.df.ID.unique())
+        if num_ind_tests == 0:
+            continue
         p_thresh = 0.05 / num_ind_tests
 
         if len(mp.thinned) <= 1:
