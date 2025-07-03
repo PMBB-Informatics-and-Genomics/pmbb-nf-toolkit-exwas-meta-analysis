@@ -1,5 +1,8 @@
 nextflow.enable.dsl = 2
 
+// set a few defaults
+params.region_plot_pcol = 'p_skato'
+
 // log info
 log.info """\
 NEXTFLOW - DSL2 - ExWAS Meta-Analysis - P I P E L I N E
@@ -28,6 +31,7 @@ Inverse-Variance Weighted Effect Size Estimates
 Post-Processing Parameters
 ============================================
 p thresh          :  ${params.p_cutoff_summarize}
+pval col for plots:  ${params.region_plot_pcol}
 
 Meta-Analysis Cohort Scheme
 ============================================
@@ -158,7 +162,7 @@ workflow EXWAS_META {
             }
 
             // Pass each individual cohort/phenotype summary stats file to be munged
-            regions_col_info = params.burden_cols + params.regions_info_cols
+            regions_col_info = (params.burden_cols == null ? [:] : params.burden_cols) + params.regions_info_cols
             regions_col_info['p_skat'] = params.skat_p_col
             regions_col_info['p_skato'] = params.skato_p_col
             regions_munge_output = munge_regions_sumstats_file(regions_sumstats_keep, regions_col_info, exwas_meta_munge_script)
@@ -194,7 +198,7 @@ workflow EXWAS_META {
             make_regions_summary_table(regions_filtered_sumstats_list)
 
             // Make the region-based Manhattan plots
-            regions_plots = plot_regions_meta(meta_regions_sumstats, meta_regions_plot_script)
+            regions_plots = plot_regions_meta(meta_regions_sumstats, meta_regions_plot_script, params.region_plot_pcol)
 
             // Here we collect all the individual manifest files and concatenate them
             // take the 4 input tuples of cohort, pheno, pngs and csvs, extract csvs, filter on manifest
@@ -268,6 +272,8 @@ workflow EXWAS_META {
 
         // Here we can collect all the final meta-analysis sizes (helpful later)
         sample_size_table = make_analysis_size_table(sample_sizes_list)
+
+        json_params = dump_params_to_json(params)
 }
 
 // If any of the expected summary stats files didn't exist, write a log
@@ -419,6 +425,7 @@ process plot_regions_meta {
     input:
         tuple val(analysis), val(pheno), path(sumstats)
         path exwas_meta_regions_plot_script
+        val plotting_p_col
     output:
         tuple val(analysis), val(pheno), path("${analysis}.${pheno}*.png"), path("${analysis}.${pheno}.exwas_regions.plots_manifest.csv")
     shell:
@@ -427,6 +434,7 @@ process plot_regions_meta {
           -a ${analysis} \
           -p ${pheno} \
           -s ${sumstats} \
+          --pcol ${plotting_p_col}
         """
     stub:
         """
@@ -635,3 +643,19 @@ process collect_exwas_singles_plots {
         touch ${saige_analysis}.plots_manifest.csv
         """
 }
+
+import groovy.json.JsonBuilder
+process dump_params_to_json {
+    publishDir "${launchDir}/Summary", mode: 'copy'
+    machineType 'n2-standard-2'
+
+    input:
+        val params_dict
+    output:
+        path('exwas_meta_params.json')
+    shell:
+        """
+        echo '${new JsonBuilder(params_dict).toPrettyString().replace(';', '|')}' > exwas_meta_params.json
+        """
+}
+
